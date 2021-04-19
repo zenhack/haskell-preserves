@@ -2,6 +2,8 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE UndecidableInstances  #-}
 module Preserves
     ( Atom(..)
@@ -9,6 +11,7 @@ module Preserves
     , Compound(..)
     , ToValue(..)
     , FromValue(..)
+    , EncodePointers(..)
 
     , mapValue
     , traverseValue
@@ -47,11 +50,16 @@ data Value p
     | Pointer p
     deriving(Show, Read, Eq, Ord, Generic)
 
-class Functor m => ToValue a m where
-    toValue :: a -> m (Fix Value)
+data DecodeError = DecodeError
 
-class FromValue a m p where
-    fromValue :: Value p -> m a
+class EncodePointers p m where
+    encodePointers :: Value p -> m (Fix Value)
+
+class ToValue a p where
+    toValue :: a -> (Value p)
+
+class FromValue a p where
+    fromValue :: Value p -> Either DecodeError a
 
 -- TODO: make sure Ord instance agrees with the spec -- right now we depend
 -- on the `containers` package's notion of order, which I(zenhack) haven't
@@ -130,17 +138,22 @@ traverseValue f = \case
   where
     go = traverseValue f
 
-instance (Ord p, Applicative m, ToValue p m) => ToValue (Value p) m where
-    toValue = fmap Fix . traverseValue toValue
+instance ToValue (Value p) p where
+    toValue = id
 
-instance Applicative m => ToValue Atom m where
-    toValue = pure . Fix . Atom
-
-instance (Ord p, Applicative m, ToValue p m) => ToValue (Compound p) m where
-    toValue = toValue . Compound
-
-instance (Functor m, ToValue (f (Fix f)) m) => ToValue (Fix f) m where
-    toValue    (Fix x) = toValue    x
-
-instance Applicative m => FromValue (Value p) m p where
+instance FromValue (Value p) p where
     fromValue = pure
+
+instance ToValue Atom p where
+    toValue = Atom
+
+instance FromValue Atom p where
+    fromValue (Atom v) = Right v
+    fromValue _        = Left DecodeError
+
+instance ToValue (Compound p) p where
+    toValue = Compound
+
+instance FromValue (Compound p) p where
+    fromValue (Compound c) = Right c
+    fromValue _            = Left DecodeError

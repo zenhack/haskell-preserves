@@ -1,12 +1,7 @@
 module Preserves.Syrup
-    ( pureValueToBuilder
+    ( module Preserves.Syrup.Encode
+    , module Preserves.Syrup.Decode
     ) where
 
-import Preserves
-import Zhp
-
-import qualified Data.ByteString.Builder as BB
-
-pureValueToBuilder :: Fix Value -> BB.Builder
-pureValueToBuilder (Fix v) = case v of
-    _ -> error "TODO"
+import Preserves.Syrup.Decode
+import Preserves.Syrup.Encode
