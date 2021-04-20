@@ -43,8 +43,12 @@ library
     , Preserves.Syrup
     , Preserves.Syrup.Encode
     , Preserves.Syrup.Decode
+
 test-suite tests
   import: shared-opts
+  build-depends:
+      preserves
+    , hedgehog
   type: exitcode-stdio-1.0
   hs-source-dirs: tests
   main-is: Main.hs
