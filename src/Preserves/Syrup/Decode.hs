@@ -22,6 +22,7 @@ getValue = do
         '{' -> Compound . Dictionary <$> getDictionary
         '[' -> Compound . Sequence <$> getSequence
         '#' -> Compound . Set <$> getSet
+        '<' -> Compound <$> getRecord
         _   -> Atom <$> getStringLike
 
 getStringLike :: Get Atom
@@ -69,6 +70,13 @@ getSet = S.fromList <$> between (getChar8 '#') (getChar8 '$') getValue
 getDictionary :: Ord a => Get (M.Map (Value a) (Value a))
 getDictionary = M.fromList <$> between (getChar8 '{') (getChar8 '}')
     ((,) <$> getValue <*> getValue)
+
+getRecord :: Ord a => Get (Compound a)
+getRecord = do
+    xs <- between (getChar8 '<') (getChar8 '>') getValue
+    case xs of
+        (y : ys) -> pure $ Record y ys
+        []       -> empty
 
 parseDigit :: Char -> Integer
 parseDigit c = fromIntegral (fromEnum c - fromEnum '0')
