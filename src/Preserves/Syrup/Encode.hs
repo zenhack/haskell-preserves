@@ -24,7 +24,9 @@ encodeAtom = \case
     Bool False      -> "f"
     Float n         -> "F" <> BB.floatBE n
     Double n        -> "D" <> BB.doubleBE n
-    SignedInteger n -> "i" <> fromString (show n) <> "e"
+    SignedInteger n
+        | n < 0 -> fromString (show (negate n)) <> "-"
+        | otherwise -> fromString (show n) <> "+"
     String s        -> encodeText "\"" s
     ByteString lbs  -> encodeBytes ":" lbs
     Symbol s        -> encodeText "'" s

@@ -18,20 +18,21 @@ getValue = do
         'f' -> getWord8 *> pure (Atom $ Bool False)
         'F' -> getWord8 *> (Atom . Float <$> getFloatbe)
         'D' -> getWord8 *> (Atom . Double <$> getDoublebe)
-        'i' -> getWord8 *> (Atom . SignedInteger <$> getSignedInteger)
         '{' -> Compound . Dictionary <$> getDictionary
         '[' -> Compound . Sequence <$> getSequence
         '#' -> Compound . Set <$> getSet
         '<' -> Compound <$> getRecord
-        _   -> Atom <$> getStringLike
+        _   -> Atom <$> getIntPrefixed
 
-getStringLike :: Get Atom
-getStringLike = do
+getIntPrefixed :: Get Atom
+getIntPrefixed = do
     (n, c) <- getInteger
     case c of
         ':'  -> ByteString <$> getLazyByteString (fromIntegral n)
         '"'  -> String <$> getString (fromIntegral n)
         '\'' -> Symbol <$> getString (fromIntegral n)
+        '+'  -> pure $ SignedInteger $ fromIntegral n
+        '-'  -> pure $ SignedInteger $ negate $ fromIntegral n
         _    -> empty
 
 getString :: Int -> Get LT.Text
@@ -93,17 +94,3 @@ getInteger = do
         if isDigit c
             then go (accum * 10 + parseDigit c)
             else pure (accum, c)
-
-getSignedInteger :: Get Integer
-getSignedInteger = do
-    c <- lookAhead getAnyChar8
-    case c of
-        '+' -> getAnyChar8 *> go
-        '-' -> getAnyChar8 *> (negate <$> go)
-        _   -> go
-  where
-    go = do
-        (n, e) <- getInteger
-        if e == 'e'
-            then pure n
-            else empty
