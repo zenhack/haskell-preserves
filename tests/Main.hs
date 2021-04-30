@@ -4,10 +4,10 @@ module Main (main) where
 import           Data.Binary.Get
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Lazy    as LBS
+import           Data.Fix
 import qualified Data.Map.Strict         as M
 import qualified Data.Set                as S
 import qualified Data.Text.Lazy          as LT
-import           Data.Void
 import           Hedgehog
 import qualified Hedgehog.Gen            as Gen
 import qualified Hedgehog.Range          as Range
@@ -20,10 +20,11 @@ main = do
     ok <- checkParallel $$(discover)
     unless ok $ exitFailure
 
-genValue :: MonadGen m => m (Value Void)
+genValue :: MonadGen m => m (Value (Fix Value))
 genValue = Gen.choice
     [ Atom <$> genAtom
     , Compound <$> genCompound
+    , Pointer . Fix <$> Gen.small genValue
     ]
 
 text :: MonadGen m => m LT.Text
@@ -43,10 +44,10 @@ genAtom = Gen.choice
 genList :: MonadGen m => m a -> m [a]
 genList = Gen.list (Range.linear 0 10)
 
-genValues :: MonadGen m => m [Value Void]
+genValues :: MonadGen m => m [Value (Fix Value)]
 genValues = genList (Gen.small genValue)
 
-genCompound :: MonadGen m => m (Compound Void)
+genCompound :: MonadGen m => m (Compound (Fix Value))
 genCompound = Gen.choice
     [ Record <$> Gen.small genValue <*> genValues
     , Sequence <$> genValues

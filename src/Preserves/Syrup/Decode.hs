@@ -5,6 +5,7 @@ module Preserves.Syrup.Decode
 
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as LBS
+import           Data.Fix
 import qualified Data.Map.Strict      as M
 import qualified Data.Set             as S
 import qualified Data.Text.Encoding   as TE
@@ -16,13 +17,13 @@ import           Zhp
 -- | Decode a value from a lazy bytestring. Returns a triple of the unused portion of
 -- the input (if any), the number of bytes consumed, and either an error message (on failure)
 -- or the value.
-decodeValue :: Ord a => LBS.ByteString -> (LBS.ByteString, ByteOffset, Either String (Value a))
+decodeValue :: LBS.ByteString -> (LBS.ByteString, ByteOffset, Either String (Value (Fix Value)))
 decodeValue input =
     case runGetOrFail getValue input of
         Left (rest, off, err)    -> (rest, off, Left err)
         Right (rest, off, value) -> (rest, off, Right value)
 
-getValue :: Ord a => Get (Value a)
+getValue :: Get (Value (Fix Value))
 getValue = do
     b <- lookAhead getWord8
     case toEnum (fromIntegral b) of
@@ -34,6 +35,7 @@ getValue = do
         '[' -> Compound . Sequence <$> getSequence
         '#' -> Compound . Set <$> getSet
         '<' -> Compound <$> getRecord
+        '!' -> getWord8 *> (Pointer . Fix <$> getValue)
         _   -> Atom <$> getIntPrefixed
 
 getIntPrefixed :: Get Atom
@@ -74,17 +76,17 @@ between start end elts = do
         , (:) <$> elts <*> go
         ]
 
-getSequence :: Ord a => Get [Value a]
+getSequence :: Get [Value (Fix Value)]
 getSequence = between (getChar8 '[') (getChar8 ']') getValue
 
-getSet :: Ord a => Get (S.Set (Value a))
+getSet :: Get (S.Set (Value (Fix Value)))
 getSet = S.fromList <$> between (getChar8 '#') (getChar8 '$') getValue
 
-getDictionary :: Ord a => Get (M.Map (Value a) (Value a))
+getDictionary :: Get (M.Map (Value (Fix Value)) (Value (Fix Value)))
 getDictionary = M.fromList <$> between (getChar8 '{') (getChar8 '}')
     ((,) <$> getValue <*> getValue)
 
-getRecord :: Ord a => Get (Compound a)
+getRecord :: Get (Compound (Fix Value))
 getRecord = do
     xs <- between (getChar8 '<') (getChar8 '>') getValue
     case xs of

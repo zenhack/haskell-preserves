@@ -5,18 +5,18 @@ module Preserves.Syrup.Encode
 
 import qualified Data.ByteString.Builder as BB
 import qualified Data.ByteString.Lazy    as LBS
+import           Data.Fix
 import qualified Data.Map.Strict         as M
 import qualified Data.Text.Encoding      as TE
 import qualified Data.Text.Lazy          as LT
-import           Data.Void
 import           Preserves
 import           Zhp
 
-encodeValue :: Value Void -> BB.Builder
+encodeValue :: Value (Fix Value) -> BB.Builder
 encodeValue = \case
-    Atom a     -> encodeAtom a
-    Compound c -> encodeCompound c
-    Pointer p  -> absurd p
+    Atom a          -> encodeAtom a
+    Compound c      -> encodeCompound c
+    Pointer (Fix p) -> "!" <> encodeValue p
 
 encodeAtom :: Atom -> BB.Builder
 encodeAtom = \case
@@ -31,7 +31,7 @@ encodeAtom = \case
     ByteString lbs  -> encodeBytes ":" lbs
     Symbol s        -> encodeText "'" s
 
-encodeCompound :: Compound Void -> BB.Builder
+encodeCompound :: Compound (Fix Value) -> BB.Builder
 encodeCompound = \case
     Record tag args -> "<" <> foldMap encodeValue (tag:args) <> ">"
     Sequence xs -> "[" <> foldMap encodeValue xs <> "]"
