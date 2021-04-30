@@ -1,14 +1,26 @@
 module Preserves.Syrup.Decode
     ( getValue
+    , decodeValue
     ) where
 
 import           Data.Binary.Get
-import qualified Data.Map.Strict    as M
-import qualified Data.Set           as S
-import qualified Data.Text.Encoding as TE
-import qualified Data.Text.Lazy     as LT
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Map.Strict      as M
+import qualified Data.Set             as S
+import qualified Data.Text.Encoding   as TE
+import qualified Data.Text.Lazy       as LT
 import           Preserves
 import           Zhp
+
+
+-- | Decode a value from a lazy bytestring. Returns a triple of the unused portion of
+-- the input (if any), the number of bytes consumed, and either an error message (on failure)
+-- or the value.
+decodeValue :: Ord a => LBS.ByteString -> (LBS.ByteString, ByteOffset, Either String (Value a))
+decodeValue input =
+    case runGetOrFail getValue input of
+        Left (rest, off, err)    -> (rest, off, Left err)
+        Right (rest, off, value) -> (rest, off, Right value)
 
 getValue :: Ord a => Get (Value a)
 getValue = do
