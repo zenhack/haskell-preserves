@@ -19,12 +19,13 @@ module Preserves
 
 import qualified Data.ByteString.Lazy  as LBS
 import           Data.Fix              (Fix(..))
-import           Data.Functor.Classes  (Eq1(..), Ord1(..))
+import           Data.Functor.Classes
 import           Data.Functor.Identity (runIdentity)
 import qualified Data.Map.Strict       as M
 import qualified Data.Set              as S
 import qualified Data.Text.Lazy        as LT
 import           GHC.Generics          (Generic)
+import           Text.Show             (showListWith, showParen, showString)
 import           Zhp                   hiding (map)
 
 data Atom
@@ -61,9 +62,28 @@ class ToValue a p where
 class FromValue a p where
     fromValue :: Value p -> Either DecodeError a
 
--- TODO: make sure Ord instance agrees with the spec -- right now we depend
--- on the `containers` package's notion of order, which I(zenhack) haven't
--- checked is the same.
+instance Show1 Compound where
+    liftShowsPrec f fl p v =
+        let go = liftShowsPrec f fl in
+        case v of
+            Record x xs ->
+                showParen (p > 10) $
+                    showString "Record "
+                    . go 11 x
+                    . showListWith (go 0) xs
+            Sequence xs ->
+                showParen (p > 10) $
+                    showString "Sequence " . showListWith (go 0) xs
+            Set xs ->
+                showParen (p > 10) $
+                    showString "Set (fromList " . showListWith (go 0) (S.toList xs) . showString ")"
+            Dictionary xs ->
+                showParen (p > 10) $
+                    showString "Dictionary (fromList "
+                    . showListWith
+                        (\(x, y) -> showString "(" . go 0 x . showString "," . go 0 y . showString ")")
+                        (M.toList xs)
+                    . showString ")"
 
 instance Eq1 Compound where
     liftEq f x y = case (x, y) of
@@ -77,6 +97,17 @@ instance Eq1 Compound where
                 (toListList xs)
                 (toListList ys)
         (_, _) -> False
+
+
+-- Implement type classes from Data.Functor.Classes. Annoyingly, there doesn't
+-- seem to be a good way to auto-derive these; the fact that we use the parameter
+-- as a map key means that it always has an Ord constraint, which breaks everything.
+-- so the implementations below are the boring ones you'd get if you could just derive
+-- them, but we have to do them by hand...
+--
+-- TODO: make sure the Ord{,1} instance agrees with the spec -- right now we depend
+-- on the `containers` package's notion of order, which I(zenhack) haven't
+-- checked is the same.
 
 instance Ord1 Compound where
     liftCompare f x y = case (x, y) of
@@ -103,6 +134,12 @@ instance Ord1 Compound where
 
 toListList :: M.Map k k -> [[k]]
 toListList m = [ [k, v]  | (k, v) <- M.toList m ]
+
+instance Show1 Value where
+    liftShowsPrec f fl p = \case
+        Atom v    -> showParen (p > 10) $ showString "Atom " . showsPrec 11 v
+        Pointer v -> showParen (p > 10) $ showString "Pointer " . f 11 v
+        Compound v -> showParen (p > 10) $ showString "Compound " . liftShowsPrec f fl 11 v
 
 instance Eq1 Value where
     liftEq f x y = case (x, y) of
