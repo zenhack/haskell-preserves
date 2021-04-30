@@ -12,9 +12,9 @@ module Preserves
     , ToValue(..)
     , FromValue(..)
     , EncodePointers(..)
-
-    , mapValue
-    , traverseValue
+    , interpPtrs
+    , Anno(..)
+    , stripAnno
     ) where
 
 import qualified Data.ByteString.Lazy  as LBS
@@ -50,6 +50,24 @@ data Value p
     | Compound (Compound p)
     | Pointer p
     deriving(Show, Read, Eq, Ord, Generic)
+
+data Anno p
+    = AnnoValue [Value (Anno p)] (Value (Anno p))
+    | AnnoPtr p
+    deriving(Show, Read, Generic)
+
+instance Ord p => Eq (Anno p) where
+    x == y = stripAnno x == stripAnno y
+
+instance Ord p => Ord (Anno p) where
+    compare x y = compare (stripAnno x) (stripAnno y)
+
+stripAnno :: Ord p => Anno p -> Value p
+stripAnno = runIdentity . go
+  where
+    go = \case
+        AnnoValue _ v -> interpPtrs go v
+        AnnoPtr p     -> pure $ Pointer p
 
 data DecodeError = DecodeError
 
@@ -159,21 +177,25 @@ instance Ord1 Value where
         (Compound _, _)            -> LT
         (_, Compound _)            -> GT
 
-mapValue :: (Ord a, Ord b) => (a -> b) -> Value a -> Value b
-mapValue f = runIdentity . traverseValue (pure . f)
+interpPtrs :: (Applicative f, Ord a, Ord b) => (a -> f (Value b)) -> Value a -> f (Value b)
+interpPtrs interp = \case
+    Atom a     -> pure $ Atom a
+    Pointer p  -> interp p
+    Compound c -> Compound <$> traverseCompound (interpPtrs interp) c
 
-traverseValue :: Applicative f => (Ord a, Ord b) => (a -> f b) -> Value a -> f (Value b)
-traverseValue f = \case
-    Atom x -> pure $ Atom x
-    Compound x -> Compound <$> case x of
-        Record tag args -> Record <$> go tag <*> (traverse go args)
-        Sequence xs     -> Sequence <$> traverse go xs
-        Set xs          -> Set . S.fromList <$> traverse go (S.toList xs)
-        Dictionary xs   -> Dictionary . M.fromList <$>
-            for (M.toList xs) (\(k, v) -> (,) <$> go k <*> go v)
-    Pointer p       -> Pointer <$> f p
-  where
-    go = traverseValue f
+traverseCompound :: (Applicative f, Ord a, Ord b) => (Value a -> f (Value b)) -> Compound a -> f (Compound b)
+traverseCompound f = \case
+    Record label args ->
+        Record
+            <$> f label
+            <*> traverse f args
+    Sequence xs ->
+        Sequence <$> traverse f xs
+    Set xs ->
+        Set . S.fromList <$> traverse f (S.toList xs)
+    Dictionary d ->
+        Dictionary . M.fromList <$>
+            sequence [ (,) <$> f k <*> f v | (k, v) <- M.toList d ]
 
 instance ToValue (Value p) p where
     toValue = id
