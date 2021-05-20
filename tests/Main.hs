@@ -24,7 +24,7 @@ genValue :: MonadGen m => m (Value (Fix Value))
 genValue = Gen.choice
     [ Atom <$> genAtom
     , Compound <$> genCompound
-    , Pointer . Fix <$> Gen.small genValue
+    , Embedded . Fix <$> Gen.small genValue
     ]
 
 text :: MonadGen m => m LT.Text

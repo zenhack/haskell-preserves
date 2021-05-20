@@ -14,9 +14,9 @@ import           Zhp
 
 encodeValue :: Value (Fix Value) -> BB.Builder
 encodeValue = \case
-    Atom a          -> encodeAtom a
-    Compound c      -> encodeCompound c
-    Pointer (Fix p) -> "!" <> encodeValue p
+    Atom a           -> encodeAtom a
+    Compound c       -> encodeCompound c
+    Embedded (Fix p) -> "!" <> encodeValue p
 
 encodeAtom :: Atom -> BB.Builder
 encodeAtom = \case

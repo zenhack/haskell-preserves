@@ -11,8 +11,8 @@ module Preserves
     , Compound(..)
     , ToValue(..)
     , FromValue(..)
-    , EncodePointers(..)
-    , interpPtrs
+    , EncodeEmbedded(..)
+    , interpEmbedded
     , Anno(..)
     , stripAnno
     ) where
@@ -45,15 +45,15 @@ data Compound p
     | Dictionary (M.Map (Value p) (Value p))
     deriving(Show, Read, Eq, Ord, Generic)
 
-data Value p
+data Value a
     = Atom !Atom
-    | Compound (Compound p)
-    | Pointer p
+    | Compound (Compound a)
+    | Embedded a
     deriving(Show, Read, Eq, Ord, Generic)
 
 data Anno p
     = AnnoValue [Value (Anno p)] (Value (Anno p))
-    | AnnoPtr p
+    | AnnoEmbed p
     deriving(Show, Read, Generic)
 
 instance Ord p => Eq (Anno p) where
@@ -62,23 +62,23 @@ instance Ord p => Eq (Anno p) where
 instance Ord p => Ord (Anno p) where
     compare x y = compare (stripAnno x) (stripAnno y)
 
-stripAnno :: Ord p => Anno p -> Value p
+stripAnno :: Ord e => Anno e -> Value e
 stripAnno = runIdentity . go
   where
     go = \case
-        AnnoValue _ v -> interpPtrs go v
-        AnnoPtr p     -> pure $ Pointer p
+        AnnoValue _ v -> interpEmbedded go v
+        AnnoEmbed e   -> pure $ Embedded e
 
 data DecodeError = DecodeError
 
-class EncodePointers p m where
-    encodePointers :: Value p -> m (Fix Value)
+class EncodeEmbedded e m where
+    encodeEmbedded :: Value e -> m (Fix Value)
 
-class ToValue a p where
-    toValue :: a -> (Value p)
+class ToValue a e where
+    toValue :: a -> (Value e)
 
-class FromValue a p where
-    fromValue :: Value p -> Either DecodeError a
+class FromValue a e where
+    fromValue :: Value e -> Either DecodeError a
 
 instance Show1 Compound where
     liftShowsPrec f fl p v =
@@ -156,32 +156,32 @@ toListList m = [ [k, v]  | (k, v) <- M.toList m ]
 instance Show1 Value where
     liftShowsPrec f fl p = \case
         Atom v    -> showParen (p > 10) $ showString "Atom " . showsPrec 11 v
-        Pointer v -> showParen (p > 10) $ showString "Pointer " . f 11 v
+        Embedded v -> showParen (p > 10) $ showString "Embedded " . f 11 v
         Compound v -> showParen (p > 10) $ showString "Compound " . liftShowsPrec f fl 11 v
 
 instance Eq1 Value where
     liftEq f x y = case (x, y) of
         (Atom x', Atom y')         -> x' == y'
         (Compound x', Compound y') -> liftEq f x' y'
-        (Pointer x', Pointer y')   -> f x' y'
+        (Embedded x', Embedded y') -> f x' y'
         _                          -> False
 
 instance Ord1 Value where
     liftCompare f x y = case (x, y) of
         (Atom x', Atom y')         -> compare x' y'
         (Compound x', Compound y') -> liftCompare f x' y'
-        (Pointer x', Pointer y')   -> f x' y'
+        (Embedded x', Embedded y') -> f x' y'
 
         (Atom _, _)                -> LT
         (_, Atom _)                -> GT
         (Compound _, _)            -> LT
         (_, Compound _)            -> GT
 
-interpPtrs :: (Applicative f, Ord a, Ord b) => (a -> f (Value b)) -> Value a -> f (Value b)
-interpPtrs interp = \case
+interpEmbedded :: (Applicative f, Ord a, Ord b) => (a -> f (Value b)) -> Value a -> f (Value b)
+interpEmbedded interp = \case
     Atom a     -> pure $ Atom a
-    Pointer p  -> interp p
-    Compound c -> Compound <$> traverseCompound (interpPtrs interp) c
+    Embedded p -> interp p
+    Compound c -> Compound <$> traverseCompound (interpEmbedded interp) c
 
 traverseCompound :: (Applicative f, Ord a, Ord b) => (Value a -> f (Value b)) -> Compound a -> f (Compound b)
 traverseCompound f = \case

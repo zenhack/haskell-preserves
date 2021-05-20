@@ -35,7 +35,7 @@ getValue = do
         '[' -> Compound . Sequence <$> getSequence
         '#' -> Compound . Set <$> getSet
         '<' -> Compound <$> getRecord
-        '!' -> getWord8 *> (Pointer . Fix <$> getValue)
+        '!' -> getWord8 *> (Embedded . Fix <$> getValue)
         _   -> Atom <$> getIntPrefixed
 
 getIntPrefixed :: Get Atom
