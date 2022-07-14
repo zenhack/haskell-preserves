@@ -4,6 +4,8 @@ module Preserves.Text.Parse
 where
 
 import Data.Fix (Fix (..))
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import Data.Text (Text)
 import Data.Void (Void)
 import Preserves
@@ -18,6 +20,9 @@ type Parser = Parsec Void Text
 
 type ErrBundle = ParseErrorBundle Text Void
 
+pKwd :: Text -> Parser ()
+pKwd s = void $ pToken (string s)
+
 pToken :: Parser a -> Parser a
 pToken p = try p <* whitespace
 
@@ -28,18 +33,42 @@ pDoc :: Parser (Anno (Fix Value))
 pDoc = whitespace *> pAnno
 
 pAnno :: Parser (Anno (Fix Value))
-pAnno = Anno [] <$> pValue
+pAnno =
+  -- TODO: actually recognize annotations (including comment syntax)
+  Anno [] <$> pValue
 
 pValue :: Parser (Value (Fix Value))
-pValue = Atom <$> pAtom
+pValue =
+  choice
+    [ Atom <$> pAtom,
+      Compound <$> pCompound,
+      Embedded <$> pEmbedded
+    ]
 
 pAtom :: Parser Atom
 pAtom =
   choice
     [ Bool <$> pBool
+    -- TODO
     ]
 
 pTrue, pFalse, pBool :: Parser Bool
-pTrue = pToken (string "#t") *> pure True
-pFalse = pToken (string "#f") *> pure False
+pTrue = pKwd "#t" *> pure True
+pFalse = pKwd "#f" *> pure False
 pBool = pTrue <|> pFalse
+
+pCompound :: Parser (Compound (Fix Value))
+pCompound =
+  choice
+    [ between (pKwd "<") (pKwd ">") $
+        Record <$> pAnno <*> many pAnno,
+      between (pKwd "[") (pKwd "]") $
+        Sequence <$> many pAnno,
+      between (pKwd "#{") (pKwd "}") $
+        Set . S.fromList <$> many pAnno,
+      between (pKwd "{") (pKwd "}") $
+        Dictionary . M.fromList <$> many ((,) <$> pAnno <*> pAnno)
+    ]
+
+pEmbedded :: Parser (Fix Value)
+pEmbedded = pKwd "#!" *> (Fix <$> pValue)
