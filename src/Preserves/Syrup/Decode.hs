@@ -76,21 +76,24 @@ between start end elts = do
         , (:) <$> elts <*> go
         ]
 
-getSequence :: Get [Value (Fix Value)]
-getSequence = between (getChar8 '[') (getChar8 ']') getValue
+getAnno :: Get (Anno (Fix Value))
+getAnno = Anno [] <$> getValue
 
-getSet :: Get (S.Set (Value (Fix Value)))
-getSet = S.fromList <$> between (getChar8 '#') (getChar8 '$') getValue
+getSequence :: Get [Anno (Fix Value)]
+getSequence = between (getChar8 '[') (getChar8 ']') getAnno
 
-getDictionary :: Get (M.Map (Value (Fix Value)) (Value (Fix Value)))
+getSet :: Get (S.Set (Anno (Fix Value)))
+getSet = S.fromList <$> between (getChar8 '#') (getChar8 '$') getAnno
+
+getDictionary :: Get (M.Map (Anno (Fix Value)) (Anno (Fix Value)))
 getDictionary = M.fromList <$> between (getChar8 '{') (getChar8 '}')
-    ((,) <$> getValue <*> getValue)
+    ((,) <$> getAnno <*> getAnno)
 
 getRecord :: Get (Compound (Fix Value))
 getRecord = do
     xs <- between (getChar8 '<') (getChar8 '>') getValue
     case xs of
-        (y : ys) -> pure $ Record y ys
+        (y : ys) -> pure $ Record (Anno [] y) (map (Anno []) ys)
         []       -> empty
 
 parseDigit :: Char -> Integer

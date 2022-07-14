@@ -14,7 +14,6 @@ module Preserves
     , EncodeEmbedded(..)
     , interpEmbedded
     , Anno(..)
-    , stripAnno
     ) where
 
 import qualified Data.ByteString.Lazy  as LBS
@@ -38,44 +37,38 @@ data Atom
     | Symbol !LT.Text
     deriving(Show, Read, Eq, Ord, Generic)
 
-data Compound p
-    = Record (Value p) [Value p]
-    | Sequence [Value p]
-    | Set (S.Set (Value p))
-    | Dictionary (M.Map (Value p) (Value p))
+data Compound e
+    = Record (Anno e) [Anno e]
+    | Sequence [Anno e]
+    | Set (S.Set (Anno e))
+    | Dictionary (M.Map (Anno e) (Anno e))
     deriving(Show, Read, Eq, Ord, Generic)
 
-data Value a
+data Value e
     = Atom !Atom
-    | Compound (Compound a)
-    | Embedded a
+    | Compound (Compound e)
+    | Embedded e
     deriving(Show, Read, Eq, Ord, Generic)
 
-data Anno p
-    = AnnoValue [Value (Anno p)] (Value (Anno p))
-    | AnnoEmbed p
+data Anno e = Anno
+    { annotations :: [Value e]
+    , annoValue :: Value e
+    }
     deriving(Show, Read, Generic)
 
 instance Ord p => Eq (Anno p) where
-    x == y = stripAnno x == stripAnno y
+    x == y = annoValue x == annoValue y
 
 instance Ord p => Ord (Anno p) where
-    compare x y = compare (stripAnno x) (stripAnno y)
-
-stripAnno :: Ord e => Anno e -> Value e
-stripAnno = runIdentity . go
-  where
-    go = \case
-        AnnoValue _ v -> interpEmbedded go v
-        AnnoEmbed e   -> pure $ Embedded e
+    compare x y = compare (annoValue x) (annoValue y)
 
 data DecodeError = DecodeError
 
 class EncodeEmbedded e m where
-    encodeEmbedded :: Value e -> m (Fix Value)
+    encodeEmbedded :: e -> m (Fix Value)
 
 class ToValue a e where
-    toValue :: a -> (Value e)
+    toValue :: a -> Value e
 
 class FromValue a e where
     fromValue :: Value e -> Either DecodeError a
@@ -102,6 +95,20 @@ instance Show1 Compound where
                         (\(x, y) -> showString "(" . go 0 x . showString "," . go 0 y . showString ")")
                         (M.toList xs)
                     . showString ")"
+
+instance Ord1 Anno where
+    liftCompare f x y = liftCompare f (annoValue x) (annoValue y)
+
+instance Eq1 Anno where
+    liftEq f x y = liftEq f (annoValue x) (annoValue y)
+
+instance Show1 Anno where
+    liftShowsPrec f fl p v =
+        let go = liftShowsPrec f fl in
+        showParen (p > 10) $
+            showString "Anno "
+            . showListWith (go 0) (annotations v)
+            . go 11 (annoValue v)
 
 instance Eq1 Compound where
     liftEq f x y = case (x, y) of
@@ -187,32 +194,37 @@ traverseCompound :: (Applicative f, Ord a, Ord b) => (Value a -> f (Value b)) ->
 traverseCompound f = \case
     Record label args ->
         Record
-            <$> f label
-            <*> traverse f args
+            <$> fa label
+            <*> traverse fa args
     Sequence xs ->
-        Sequence <$> traverse f xs
+        Sequence <$> traverse fa xs
     Set xs ->
-        Set . S.fromList <$> traverse f (S.toList xs)
+        Set . S.fromList <$> traverse fa (S.toList xs)
     Dictionary d ->
         Dictionary . M.fromList <$>
-            sequence [ (,) <$> f k <*> f v | (k, v) <- M.toList d ]
+            sequence [ (,) <$> fa k <*> fa v | (k, v) <- M.toList d ]
+  where
+   fa = traverseAnno f
 
-instance ToValue (Value p) p where
+traverseAnno :: (Applicative f, Ord a, Ord b) => (Value a -> f (Value b)) -> Anno a -> f (Anno b)
+traverseAnno f (Anno a v) = Anno <$> traverse f a <*> f v
+
+instance ToValue (Value e) e where
     toValue = id
 
-instance FromValue (Value p) p where
+instance FromValue (Value e) e where
     fromValue = pure
 
-instance ToValue Atom p where
+instance ToValue Atom e where
     toValue = Atom
 
-instance FromValue Atom p where
+instance FromValue Atom e where
     fromValue (Atom v) = Right v
     fromValue _        = Left DecodeError
 
-instance ToValue (Compound p) p where
+instance ToValue (Compound e) e where
     toValue = Compound
 
-instance FromValue (Compound p) p where
+instance FromValue (Compound e) e where
     fromValue (Compound c) = Right c
     fromValue _            = Left DecodeError

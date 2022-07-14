@@ -33,10 +33,13 @@ encodeAtom = \case
 
 encodeCompound :: Compound (Fix Value) -> BB.Builder
 encodeCompound = \case
-    Record tag args -> "<" <> foldMap encodeValue (tag:args) <> ">"
-    Sequence xs -> "[" <> foldMap encodeValue xs <> "]"
-    Set xs -> "#" <> foldMap encodeValue xs <> "$"
-    Dictionary xs -> "{" <> foldMap (\(k, v) -> encodeValue k <> encodeValue v) (M.toList xs) <> "}"
+    Record tag args -> "<" <> foldMap encodeAnno (tag:args) <> ">"
+    Sequence xs -> "[" <> foldMap encodeAnno xs <> "]"
+    Set xs -> "#" <> foldMap encodeAnno xs <> "$"
+    Dictionary xs -> "{" <> foldMap (\(k, v) -> encodeAnno k <> encodeAnno v) (M.toList xs) <> "}"
+
+encodeAnno :: Anno (Fix Value) -> BB.Builder
+encodeAnno (Anno _ v) = encodeValue v
 
 encodeBytes :: BB.Builder -> LBS.ByteString -> BB.Builder
 encodeBytes joiner lbs = fromString (show $ LBS.length lbs) <> joiner <> BB.lazyByteString lbs

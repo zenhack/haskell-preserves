@@ -27,6 +27,9 @@ genValue = Gen.choice
     , Embedded . Fix <$> Gen.small genValue
     ]
 
+genAnno :: MonadGen m => m (Anno (Fix Value))
+genAnno = Anno <$> Gen.small (genList genValue) <*> genValue
+
 text :: MonadGen m => m LT.Text
 text = LT.fromStrict <$> Gen.text (Range.linear 0 20) Gen.unicode
 
@@ -47,12 +50,15 @@ genList = Gen.list (Range.linear 0 10)
 genValues :: MonadGen m => m [Value (Fix Value)]
 genValues = genList (Gen.small genValue)
 
+genAnnos :: MonadGen m => m [Anno (Fix Value)]
+genAnnos = genList (Gen.small genAnno)
+
 genCompound :: MonadGen m => m (Compound (Fix Value))
 genCompound = Gen.choice
-    [ Record <$> Gen.small genValue <*> genValues
-    , Sequence <$> genValues
-    , Set . S.fromList <$> genValues
-    , Dictionary . M.fromList <$> genList (Gen.small $ (,) <$> genValue <*> genValue)
+    [ Record <$> Gen.small genAnno <*> genAnnos
+    , Sequence <$> genAnnos
+    , Set . S.fromList <$> genAnnos
+    , Dictionary . M.fromList <$> genList (Gen.small $ (,) <$> genAnno <*> genAnno)
     ]
 
 prop_syrupEncodeDecodeId :: Property
