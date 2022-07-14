@@ -36,9 +36,10 @@ pAnno :: Parser (Anno (Fix Value))
 pAnno = Anno <$> many pAnno1 <*> pValue
 
 pAnno1 :: Parser (Value (Fix Value))
-pAnno1 = choice
-    [ Atom . String <$> pComment
-    , pKwd "@" *> pValue
+pAnno1 =
+  choice
+    [ Atom . String <$> pComment,
+      pKwd "@" *> pValue
     ]
 
 pComment :: Parser Text
