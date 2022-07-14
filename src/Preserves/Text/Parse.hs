@@ -6,7 +6,7 @@ where
 import Data.Fix (Fix (..))
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import Data.Text (Text)
+import Data.Text.Lazy (Text)
 import Data.Void (Void)
 import Preserves
 import Text.Megaparsec
@@ -33,9 +33,16 @@ pDoc :: Parser (Anno (Fix Value))
 pDoc = whitespace *> pAnno
 
 pAnno :: Parser (Anno (Fix Value))
-pAnno =
-  -- TODO: actually recognize annotations (including comment syntax)
-  Anno [] <$> pValue
+pAnno = Anno <$> many pAnno1 <*> pValue
+
+pAnno1 :: Parser (Value (Fix Value))
+pAnno1 = choice
+    [ Atom . String <$> pComment
+    , pKwd "@" *> pValue
+    ]
+
+pComment :: Parser Text
+pComment = char ';' *> takeWhileP Nothing (/= '\n')
 
 pValue :: Parser (Value (Fix Value))
 pValue =
